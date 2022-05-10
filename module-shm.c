@@ -114,7 +114,7 @@ static inline int module_client_fd(RedisModuleCtx *module)
         struct RedisModule *module;     /* Module reference. */
         client *client;                 /* Client calling a command. */
     } RedisModuleCtx;
-    return ((RedisModuleCtx*)module)->client->fd;
+    return ((RedisModuleCtx*)module)->client->conn->fd;
 }
 
 /*TODO: Try this: http://lxr.free-electrons.com/source/include/linux/hw_breakpoint.h */
@@ -132,12 +132,12 @@ static int RunThread(void* dummy __attribute__((unused)))
             if (CharFifo_UsedSpace(&conn_ctx->mem->to_server) != 0) {
                 /* ...and process it. */
                 conn_ctx_processing = conn_ctx;
-                readQueryFromClient(server.el, -1, conn_ctx->client, AE_READABLE);
+                readQueryFromClient(conn_ctx->client->conn);
                 conn_ctx_processing = NULL;
             }
             if (clientHasPendingReplies(conn_ctx->client)) {
                 conn_ctx_processing = conn_ctx;
-                sendReplyToClient(server.el, -1, conn_ctx->client, AE_WRITABLE);
+                sendReplyToClient(conn_ctx->client->conn);
                 conn_ctx_processing = NULL;
             }
             
@@ -214,7 +214,8 @@ static int Command_Open(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
     X("%lld creating shm connection \n", ustime());
     
     /* Create a client for replaying the input to */
-    client *c = createClient(-1);
+    connection *_conn_ = connCreateSocket();
+    client *c = createClient(_conn_);
     c->flags |= CLIENT_MODULE;
     
     shmConnCtx *conn_ctx = RedisModule_Alloc(sizeof(shmConnCtx));
